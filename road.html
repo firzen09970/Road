@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>退伍旅費計算機 (GMaps驗證版)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+
+    <style>
+        body { font-family: "Microsoft JhengHei", "Heiti TC", sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f0f2f5; }
+        .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        
+        h2 { color: #2c3e50; margin-top: 0; border-bottom: 4px solid #198754; padding-bottom: 10px; font-weight: 800; display: flex; align-items: center; }
+        h2::before { content: '🪖'; margin-right: 10px; font-size: 1.2em; }
+
+        .control-panel { background: #eef2f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; position: relative; z-index: 1000; }
+        
+        .form-group { margin-bottom: 15px; }
+        label { font-weight: bold; display: block; margin-bottom: 8px; color: #495057; font-size: 1.1em; }
+        
+        .origin-box {
+            background: #fff; border: 2px solid #6c757d; color: #495057;
+            padding: 10px 15px; border-radius: 6px; font-weight: bold; font-size: 1.1em;
+            display: flex; align-items: center;
+        }
+        .origin-icon { margin-right: 10px; font-size: 1.4em; }
+
+        .ts-control { border-radius: 6px !important; padding: 12px !important; font-size: 16px !important; border: 1px solid #ced4da; }
+
+        /* 計算按鈕 */
+        .btn-calc { 
+            width: 100%; padding: 14px; background-color: #198754; color: white; 
+            border: none; font-size: 18px; font-weight: bold; border-radius: 6px; 
+            cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(25, 135, 84, 0.2);
+        }
+        .btn-calc:hover { background-color: #157347; transform: translateY(-1px); }
+        
+        /* Google Maps 按鈕 */
+        .btn-gmaps {
+            display: block; width: 100%; text-decoration: none; text-align: center;
+            background-color: #4285F4; color: white; padding: 12px; border-radius: 6px;
+            font-weight: bold; margin-top: 15px; box-shadow: 0 2px 5px rgba(66, 133, 244, 0.3);
+            transition: background 0.2s;
+        }
+        .btn-gmaps:hover { background-color: #3367D6; color: white; }
+
+        /* 結果卡片 */
+        #result-card {
+            background-color: #fff; border: 1px solid #ddd;
+            padding: 0; border-radius: 8px; margin-top: 20px; display: none;
+            overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        .result-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; }
+        .result-body { padding: 15px; }
+        .result-row { margin-bottom: 8px; font-size: 1.1em; line-height: 1.5; }
+        .result-label { font-weight: bold; color: #555; display: inline-block; min-width: 80px; }
+        .result-address { font-size: 0.95em; color: #666; display: block; margin-left: 0; margin-top: 2px;}
+        .highlight-dist { color: #0d6efd; font-weight: 900; font-size: 1.2em; }
+
+        /* 金額區塊 */
+        .money-box {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 2px solid #198754; color: #155724; padding: 15px;
+            border-radius: 8px; margin-top: 15px; text-align: center;
+        }
+        .money-amount { font-size: 2.5em; font-weight: 900; line-height: 1.1; color: #dc3545; }
+        .money-note { font-size: 0.85em; margin-top: 5px; color: #555; }
+
+        #map { height: 400px; width: 100%; border-radius: 8px; margin-top: 20px; border: 1px solid #ddd; z-index: 1;}
+        .note { font-size: 0.85em; color: #888; margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>退伍旅費計算機</h2>
+    
+    <div class="control-panel">
+        <div class="form-group">
+            <label>🏁 營區出發地 (固定)：</label>
+            <div class="origin-box">
+                <span class="origin-icon">📍</span> 
+                842高雄市旗山區旗南三路234號
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="district-select">🏠 戶籍地 (區公所)：</label>
+            <select id="district-select" placeholder="請輸入區名 (例如: 永康)..." autocomplete="off">
+                <option value="">輸入關鍵字搜尋 (如: 永康, 信義)...</option>
+            </select>
+        </div>
+        
+        <button class="btn-calc" onclick="calculateRoute()">💵 預算與路徑</button>
+
+        <div id="result-card">
+            <div id="result-content"></div>
+        </div>
+        
+        <div class="note">* 預算僅供參考，實際距離請以 Google Maps 為準。<br>* 距離 ≥ 60km 發 600元，< 60km 發 200元。</div>
+    </div>
+
+    <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
+<script>
+    // --- 1. 資料庫 ---
+    const districtData = {
+        "臺南市": [
+            { name: "永康區公所", addr: "710臺南市永康區中山南路655號", lat: 23.0261, lng: 120.2563 },
+            { name: "中西區公所", addr: "700臺南市中西區開山路1號", lat: 22.9893, lng: 120.2086 },
+            { name: "東區區公所", addr: "701臺南市東區崇學路100號", lat: 22.9806, lng: 120.2244 },
+            { name: "南區區公所", addr: "702臺南市南區明興路2號", lat: 22.9613, lng: 120.1917 },
+            { name: "北區區公所", addr: "704臺南市北區成功路238巷7號", lat: 22.9997, lng: 120.2016 },
+            { name: "安平區公所", addr: "708臺南市安平區育平路316號", lat: 22.9934, lng: 120.1706 },
+            { name: "安南區公所", addr: "709臺南市安南區安中路二段308號", lat: 23.0471, lng: 120.1834 },
+            { name: "歸仁區公所", addr: "711臺南市歸仁區中正南路一段1213號", lat: 22.9680, lng: 120.2942 },
+            { name: "新化區公所", addr: "712臺南市新化區中山路130號", lat: 23.0371, lng: 120.3060 },
+            { name: "仁德區公所", addr: "717臺南市仁德區中正路三段5號", lat: 22.9719, lng: 120.2505 },
+            { name: "關廟區公所", addr: "718臺南市關廟區中正路998號", lat: 22.9616, lng: 120.3275 },
+            { name: "官田區公所", addr: "720臺南市官田區中山路一段132號", lat: 23.1843, lng: 120.3117 },
+            { name: "麻豆區公所", addr: "721臺南市麻豆區忠孝路250號", lat: 23.1860, lng: 120.2476 },
+            { name: "佳里區公所", addr: "722臺南市佳里區忠孝路5號", lat: 23.1673, lng: 120.1773 },
+            { name: "新營區公所", addr: "730臺南市新營區中正路30號", lat: 23.3073, lng: 120.3150 },
+            { name: "善化區公所", addr: "741臺南市善化區建國路190號", lat: 23.1323, lng: 120.2965 },
+            { name: "新市區公所", addr: "744臺南市新市區中興街12號", lat: 23.0788, lng: 120.2952 },
+        ],
+        "高雄市": [
+            { name: "旗山區公所", addr: "842高雄市旗山區延平一路499號", lat: 22.8885, lng: 120.4826 },
+            { name: "美濃區公所", addr: "843高雄市美濃區美中路260號", lat: 22.9156, lng: 120.5428 },
+            { name: "鳳山區公所", addr: "830高雄市鳳山區經武路30號", lat: 22.6253, lng: 120.3661 },
+            { name: "苓雅區公所", addr: "802高雄市苓雅區民權一路85號", lat: 22.6224, lng: 120.3118 },
+            { name: "三民區公所", addr: "807高雄市三民區哈爾濱街215號", lat: 22.6433, lng: 120.3155 },
+            { name: "左營區公所", addr: "813高雄市左營區左營大路479號", lat: 22.6896, lng: 120.3094 },
+            { name: "楠梓區公所", addr: "811高雄市楠梓區楠梓新路264號", lat: 22.7291, lng: 120.3270 },
+            { name: "小港區公所", addr: "812高雄市小港區小港路158號", lat: 22.5651, lng: 120.3534 },
+            { name: "鼓山區公所", addr: "804高雄市鼓山區鼓山二路166號", lat: 22.6264, lng: 120.2764 },
+            { name: "新興區公所", addr: "800高雄市新興區中正三路34號", lat: 22.6288, lng: 120.3053 },
+            { name: "前金區公所", addr: "801高雄市前金區自強二路1號", lat: 22.6277, lng: 120.2941 },
+            { name: "鹽埕區公所", addr: "803高雄市鹽埕區大仁路79號", lat: 22.6247, lng: 120.2863 },
+            { name: "前鎮區公所", addr: "806高雄市前鎮區康定路151號", lat: 22.5864, lng: 120.3184 },
+            { name: "旗津區公所", addr: "805高雄市旗津區旗津三路2號", lat: 22.5899, lng: 120.2786 },
+            { name: "大寮區公所", addr: "831高雄市大寮區鳳林三路375號", lat: 22.6053, lng: 120.3965 },
+            { name: "林園區公所", addr: "832高雄市林園區王公路1號", lat: 22.5050, lng: 120.3957 },
+            { name: "仁武區公所", addr: "814高雄市仁武區中正路135號", lat: 22.6983, lng: 120.3475 },
+            { name: "岡山區公所", addr: "820高雄市岡山區岡山路343號", lat: 22.7960, lng: 120.2960 },
+            { name: "路竹區公所", addr: "821高雄市路竹區國昌路76號", lat: 22.8550, lng: 120.2618 },
+        ],
+        "臺北市": [
+            { name: "信義區公所", addr: "110臺北市信義區福德街86號", lat: 25.0375, lng: 121.5802 },
+            { name: "中正區公所", addr: "100臺北市中正區忠孝東路一段108號", lat: 25.0440, lng: 121.5233 },
+            { name: "大同區公所", addr: "103臺北市大同區昌吉街57號", lat: 25.0645, lng: 121.5134 },
+            { name: "中山區公所", addr: "104臺北市中山區松江路367號", lat: 25.0634, lng: 121.5332 },
+            { name: "松山區公所", addr: "105臺北市松山區八德路四段692號", lat: 25.0503, lng: 121.5776 },
+            { name: "大安區公所", addr: "106臺北市大安區新生南路二段86號", lat: 25.0263, lng: 121.5364 },
+            { name: "萬華區公所", addr: "108臺北市萬華區和平西路三段120號", lat: 25.0337, lng: 121.4965 },
+            { name: "士林區公所", addr: "111臺北市士林區中正路439號", lat: 25.0935, lng: 121.5255 },
+            { name: "北投區公所", addr: "112臺北市北投區新市街30號", lat: 25.1320, lng: 121.4986 },
+            { name: "內湖區公所", addr: "114臺北市內湖區民權東路六段99號", lat: 25.0689, lng: 121.5909 },
+            { name: "南港區公所", addr: "115臺北市南港區南港路一段360號", lat: 25.0543, lng: 121.6074 },
+            { name: "文山區公所", addr: "116臺北市文山區木柵路三段220號", lat: 24.9928, lng: 121.5701 },
+        ],
+        "新北市": [
+            { name: "板橋區公所", addr: "220新北市板橋區府中路30號", lat: 25.0094, lng: 121.4594 },
+            { name: "新莊區公所", addr: "242新北市新莊區中平路133號", lat: 25.0450, lng: 121.4467 },
+            { name: "三重區公所", addr: "241新北市三重區新北大道一段11號", lat: 25.0607, lng: 121.4883 },
+            { name: "中和區公所", addr: "235新北市中和區景平路634-2號", lat: 25.0006, lng: 121.4998 },
+            { name: "永和區公所", addr: "234新北市永和區竹林路200號", lat: 25.0115, lng: 121.5150 },
+            { name: "新店區公所", addr: "231新北市新店區北新路一段86號", lat: 24.9681, lng: 121.5414 },
+            { name: "土城區公所", addr: "236新北市土城區金城路一段101號", lat: 24.9723, lng: 121.4443 },
+            { name: "蘆洲區公所", addr: "247新北市蘆洲區三民路95號", lat: 25.0864, lng: 121.4746 },
+            { name: "汐止區公所", addr: "221新北市汐止區新台五路一段268號", lat: 25.0664, lng: 121.6575 },
+            { name: "樹林區公所", addr: "238新北市樹林區鎮前街93號", lat: 24.9922, lng: 121.4190 },
+            { name: "淡水區公所", addr: "251新北市淡水區中山北路二段375號", lat: 25.1818, lng: 121.4397 },
+        ],
+        "臺中市": [
+            { name: "西屯區公所", addr: "407臺中市西屯區市政北二路386號", lat: 24.1593, lng: 120.6366 },
+            { name: "北屯區公所", addr: "406臺中市北屯區崇德路三段10號", lat: 24.1804, lng: 120.6888 },
+            { name: "南屯區公所", addr: "408臺中市南屯區永春東路679號", lat: 24.1384, lng: 120.6409 },
+            { name: "豐原區公所", addr: "420臺中市豐原區市政路2號", lat: 24.2530, lng: 120.7203 },
+            { name: "大里區公所", addr: "412臺中市大里區大新街36號", lat: 24.0995, lng: 120.6775 },
+            { name: "太平區公所", addr: "411臺中市太平區中平路144號", lat: 24.1258, lng: 120.7161 },
+            { name: "沙鹿區公所", addr: "433臺中市沙鹿區鎮政路8號", lat: 24.2341, lng: 120.5583 },
+            { name: "中區區公所", addr: "400臺中市中區成功路300號", lat: 24.1404, lng: 120.6817 },
+        ],
+        "桃園市": [
+            { name: "桃園區公所", addr: "330桃園市桃園區縣府路7號", lat: 24.9936, lng: 121.3009 },
+            { name: "中壢區公所", addr: "320桃園市中壢區環北路380號", lat: 24.9653, lng: 121.2255 },
+            { name: "平鎮區公所", addr: "324桃園市平鎮區振興路5號", lat: 24.9436, lng: 121.2132 },
+            { name: "八德區公所", addr: "334桃園市八德區中山路47號", lat: 24.9287, lng: 121.2845 },
+            { name: "楊梅區公所", addr: "326桃園市楊梅區大成路2號", lat: 24.9148, lng: 121.1458 },
+            { name: "龜山區公所", addr: "333桃園市龜山區中山街26號", lat: 24.9961, lng: 121.3516 },
+            { name: "蘆竹區公所", addr: "338桃園市蘆竹區南崁路150號", lat: 25.0503, lng: 121.2908 },
+        ],
+        "各縣市精選": [
+            { name: "新竹市東區區公所", addr: "300新竹市東區民族路40號", lat: 24.8073, lng: 120.9856 },
+            { name: "竹北市公所", addr: "302新竹縣竹北市中正西路50號", lat: 24.8396, lng: 121.0097 },
+            { name: "苗栗市公所", addr: "360苗栗縣苗栗市府前路76號", lat: 24.5694, lng: 120.8208 },
+            { name: "彰化市公所", addr: "500彰化縣彰化市光復路74號", lat: 24.0814, lng: 120.5385 },
+            { name: "南投市公所", addr: "540南投縣南投市玉井街5號", lat: 23.9103, lng: 120.6860 },
+            { name: "雲林縣斗六市公所", addr: "640雲林縣斗六市府文路38號", lat: 23.7093, lng: 120.5434 },
+            { name: "嘉義市東區區公所", addr: "600嘉義市東區吳鳳北路184號", lat: 23.4862, lng: 120.4633 },
+            { name: "嘉義縣太保市公所", addr: "612嘉義縣太保市太保里36號", lat: 23.4593, lng: 120.3323 },
+            { name: "屏東市公所", addr: "900屏東縣屏東市台糖街61號", lat: 22.6771, lng: 120.5042 },
+            { name: "宜蘭市公所", addr: "260宜蘭縣宜蘭市中山路二段432號", lat: 24.7570, lng: 121.7530 },
+            { name: "花蓮市公所", addr: "970花蓮縣花蓮市林森路252號", lat: 23.9772, lng: 121.6046 },
+            { name: "臺東市公所", addr: "950臺東縣臺東市博愛路365號", lat: 22.7561, lng: 121.1506 }
+        ]
+    };
+    
+    // 補充: 通用行政區
+    const genericDistricts = {
+         "基隆市": { "仁愛區": [25.1287, 121.7423], "信義區": [25.1257, 121.7726], "中正區": [25.1436, 121.7783] },
+         "新竹縣": { "竹東鎮": [24.7381, 121.0924], "湖口鄉": [24.9038, 121.0435] },
+         "彰化縣": { "鹿港鎮": [24.0560, 120.4350], "員林市": [23.9592, 120.5701] },
+         "嘉義縣": { "民雄鄉": [23.5515, 120.4285] },
+         "屏東縣": { "潮州鎮": [22.5505, 120.5422], "東港鎮": [22.4678, 120.4529], "恆春鎮": [22.0028, 120.7454] },
+         "宜蘭縣": { "羅東鎮": [24.6750, 121.7669], "礁溪鄉": [24.8234, 121.7702] },
+    };
+
+    // --- 2. 程式邏輯 ---
+    const originAddr = "842高雄市旗山區旗南三路234號";
+    const startLat = 22.8028; 
+    const startLng = 120.4566;
+    
+    const map = L.map('map').setView([23.5, 121], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const startMarker = L.marker([startLat, startLng], {icon: L.divIcon({className: 'custom-icon', html: '🚩', iconSize: [30, 30]})}).addTo(map)
+        .bindPopup(`<b>🚩 營區 (出發地)</b><br>${originAddr}`).openPopup();
+
+    let routeLayer = null;
+    let endMarker = null;
+
+    // --- 3. 填充選單 ---
+    const select = document.getElementById('district-select');
+    
+    for (const [city, districts] of Object.entries(districtData)) {
+        const group = document.createElement('optgroup');
+        group.label = city;
+        districts.forEach(d => {
+            const option = document.createElement('option');
+            option.value = JSON.stringify({lat: d.lat, lng: d.lng, addr: d.addr, name: city + d.name});
+            option.text = `${city}${d.name}`;
+            group.appendChild(option);
+        });
+        select.appendChild(group);
+    }
+    
+    for (const [city, districts] of Object.entries(genericDistricts)) {
+        const group = document.createElement('optgroup');
+        group.label = city + " (通用座標)";
+        for (const [name, coords] of Object.entries(districts)) {
+            const option = document.createElement('option');
+            const addrPlaceholder = `${city}${name}公所`;
+            option.value = JSON.stringify({lat: coords[0], lng: coords[1], addr: addrPlaceholder, name: city + name});
+            option.text = `${city}${name}`;
+            group.appendChild(option);
+        }
+        select.appendChild(group);
+    }
+
+    let tomSelectInstance = new TomSelect('#district-select', {
+        create: false,
+        sortField: { field: "text", direction: "asc" },
+        placeholder: "輸入戶籍地區 (例如: 永康)..."
+    });
+
+    // --- 4. 計算路徑與 Google Link 產生 ---
+    async function calculateRoute() {
+        const resultCard = document.getElementById('result-card');
+        const resultContent = document.getElementById('result-content');
+        const selectedValue = select.value;
+
+        if (!selectedValue) {
+            alert("請先輸入您的戶籍地 (區公所)！");
+            tomSelectInstance.focus();
+            return;
+        }
+
+        const destData = JSON.parse(selectedValue);
+        const endLat = destData.lat;
+        const endLng = destData.lng;
+        
+        resultCard.style.display = 'block';
+        resultContent.innerHTML = "<div style='padding:15px; text-align:center;'>⏳ 正在預估距離與金額...</div>";
+
+        // OSRM API (用於網頁快速預覽)
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+
+        // 產生 Google Maps 連結 (Official)
+        // 使用 encodeURIComponent 確保中文地址不會亂碼
+        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originAddr)}&destination=${encodeURIComponent(destData.addr)}&travelmode=driving`;
+
+        try {
+            const response = await fetch(osrmUrl);
+            const data = await response.json();
+
+            if (data.code !== 'Ok') {
+                resultContent.innerHTML = "<div style='padding:15px;'>無法規劃路徑。</div>";
+                return;
+            }
+
+            const route = data.routes[0];
+            const distanceKm = (route.distance / 1000).toFixed(1); // 公里數
+            
+            // 旅費計算
+            let money = 0;
+            let ruleDesc = "";
+            let moneyClass = "";
+            
+            if (parseFloat(distanceKm) >= 60) {
+                money = 600;
+                ruleDesc = "(系統估算 ≥ 60km)";
+            } else {
+                money = 200;
+                ruleDesc = "(系統估算 < 60km)";
+            }
+
+            // 顯示結果
+            resultContent.innerHTML = `
+                <div class="result-header">
+                    <div class="result-row"><span class="result-label">目的地：</span><b>${destData.name}</b></div>
+                    <div class="result-row"><span class="result-label">地址：</span><span class="result-address">${destData.addr}</span></div>
+                </div>
+                <div class="result-body">
+                    <div class="result-row"><span class="result-label">預估距離：</span><span class="highlight-dist">${distanceKm}</span> 公里</div>
+                    
+                    <div class="money-box">
+                        <div class="money-title">💰 系統預算金額</div>
+                        <div class="money-amount">NT$ ${money}</div>
+                        <div class="money-note">${ruleDesc}</div>
+                    </div>
+
+                    <a href="${googleMapsUrl}" target="_blank" class="btn-gmaps">
+                        🗺️ 開啟 Google Maps 驗證 (供截圖核銷)
+                    </a>
+                </div>
+            `;
+
+            if (routeLayer) map.removeLayer(routeLayer);
+            if (endMarker) map.removeLayer(endMarker);
+
+            routeLayer = L.geoJSON(route.geometry, {
+                style: { color: '#198754', weight: 6, opacity: 0.8 }
+            }).addTo(map);
+
+            endMarker = L.marker([endLat, endLng], {icon: L.divIcon({className: 'custom-icon', html: '🏠', iconSize: [30, 30]})}).addTo(map)
+                .bindPopup(`<b>🏁 戶籍地</b><br>${destData.addr}`).openPopup();
+
+            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+        } catch (error) {
+            console.error(error);
+            resultContent.innerHTML = "<div style='padding:15px; color:red;'>⚠️ 連線錯誤，請檢查網路狀態。</div>";
+        }
+    }
+</script>
+
+</body>
+</html>
